@@ -1,0 +1,94 @@
+package repository
+
+import (
+	"MaintenanceSystem/config"
+	"database/sql"
+	"fmt"
+
+	_ "github.com/lib/pq"
+)
+
+// 数据库结构体
+type UserRepo struct {
+	DB *sql.DB
+}
+
+// 构建结构体
+func NewUserRepo(db *sql.DB) *UserRepo {
+	return &UserRepo{
+		DB: db,
+	}
+}
+
+// 连接数据库
+func Conn_sql(conn string) (*sql.DB, error) {
+	db, err := sql.Open("postgres", conn)
+	if err != nil {
+		return nil, err
+	}
+	err = db.Ping()
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
+// 获得用户信息
+func (d *UserRepo) GetUser(name string) (*config.Users, error) {
+	query := `SELECT id, name, role, pwd FROM users WHERE name=$1`
+
+	var u config.Users
+	err := d.DB.QueryRow(query, name).Scan(&u.Name, &u.Role, &u.Pwd)
+	if err == sql.ErrNoRows {
+		return nil, nil // 用户不存在
+	}
+	if err != nil {
+		return nil, err // 真正错误
+	}
+	return &u, nil
+}
+
+// 创建用户
+func (d *UserRepo) CreateUser(u config.Users) error {
+	var id int
+	sqlStr := `
+    INSERT INTO users (name, role, pwd)
+    VALUES ($1,$2,$3)
+    RETURNING id`
+
+	err := d.DB.QueryRow(sqlStr, u.Name, u.Role, u.Pwd).Scan(&id)
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+// 删除用户
+func (d *UserRepo) DelUser(name string) error {
+	sqlStr := `delete from users where name=$1`
+
+	_, err := d.DB.Exec(sqlStr, name)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func Conn_db() *UserRepo {
+	const (
+		host     = "localhost"
+		database = "mydb"
+		user     = "jobuser"
+		password = "job1234"
+	)
+	// 连接串
+	var connectionString string = fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=disable", host, user, password, database)
+	db, err := Conn_sql(connectionString)
+	if err != nil {
+		fmt.Println(err)
+	}
+	d := NewUserRepo(db)
+	return d
+}
